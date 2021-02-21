@@ -184,6 +184,26 @@ class ShapeletTransform(_PanelToTabularTransformer):
                 if a != sentinel
             )
 
+        # output:
+        # {'1': array([  3,  10,  19,  24,  28,  37,  46,  51,  60,  63,  67,  69,  73,
+        #         74,  86,  87,  92, 102, 113, 119, 123, 126, 132, 136, 158, 162,
+        #        172, 173, 176, 186, 188, 189, 195, 197], dtype=int64),
+        #  '2': array([  2,   6,  11,  14,  15,  16,  34,  39,  48,  55,  68,  82,  84,
+        #         94,  95,  99, 124, 135, 144, 148, 153, 154, 159, 160, 178, 179,
+        #        187, 191, 198], dtype=int64),
+        #  '3': array([  4,   5,   7,  12,  26,  45,  47,  50,  52,  56,  65,  83,  85,
+        #         93,  98, 105, 109, 114, 115, 125, 133, 134, 139, 140, 141, 150,
+        #        161, 164, 165, 185, 192, 196, 199], dtype=int64),
+        #  '4': array([  8,  17,  18,  21,  22,  23,  29,  30,  36,  38,  42,  49,  54,
+        #         57,  59,  61,  62,  64,  66,  70,  75,  77,  78,  79,  80,  81,
+        #         88,  91,  97, 101, 103, 104, 106, 108, 111, 112, 118, 120, 129,
+        #        130, 138, 143, 145, 146, 147, 149, 157, 168, 170, 175, 180, 182,
+        #        183], dtype=int64),
+        #  '5': array([  1,   9,  13,  20,  27,  32,  33,  35,  40,  41,  43,  44,  53,
+        #         71,  72,  76,  90,  96, 100, 107, 116, 117, 127, 128, 131, 137,
+        #        142, 152, 163, 166, 167, 171, 174, 184, 190, 193], dtype=int64),
+        #  '6': array([  0,  25,  31,  58,  89, 110, 121, 122, 151, 155, 156, 169, 177,
+        #        181, 194], dtype=int64)}
         case_ids_by_class = {i: np.where(y == i)[0] for i in distinct_class_vals}
 
         # if transform is random/contract then shuffle the data initially
@@ -199,6 +219,9 @@ class ShapeletTransform(_PanelToTabularTransformer):
         round_robin_case_order = _round_robin(
             *[list(v) for k, v in case_ids_by_class.items()]
         )
+        # e.g (172, '1'), (68, '2'), (165, '3'), (183, '4'), (190, '5'), (25, '6'),
+        # (10, '1'), (11, '2'), (93, '3'), (59, '4'), (100, '5'), (151, '6'),
+        # (195, '1'), (95, '2'), (134, '3'), (120, '4'), (72, '5'), (31, '6')
         cases_to_visit = [(i, y[i]) for i in round_robin_case_order]
         # this dictionary will be used to store all possible starting
         # positions and shapelet lengths for a give series length. This
