@@ -219,7 +219,9 @@ class ShapeletTransform(_PanelToTabularTransformer):
         round_robin_case_order = _round_robin(
             *[list(v) for k, v in case_ids_by_class.items()]
         )
-        # e.g (172, '1'), (68, '2'), (165, '3'), (183, '4'), (190, '5'), (25, '6'),
+
+        # output:
+        # (172, '1'), (68, '2'), (165, '3'), (183, '4'), (190, '5'), (25, '6'),
         # (10, '1'), (11, '2'), (93, '3'), (59, '4'), (100, '5'), (151, '6'),
         # (195, '1'), (95, '2'), (134, '3'), (120, '4'), (72, '5'), (31, '6')
         cases_to_visit = [(i, y[i]) for i in round_robin_case_order]
