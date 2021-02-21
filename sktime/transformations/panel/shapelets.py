@@ -261,6 +261,10 @@ class ShapeletTransform(_PanelToTabularTransformer):
             this_class_val = cases_to_visit[case_idx][1]
 
             # minus 1 to remove this candidate from sums
+            # can be rewritten, this is not a good way to write stuff!
+            # 在每个 shapelet 开始判断前计算每个类的总数
+            # 减1是为了不把自己算在内，减少 bias，类似于把 candidate 置身室外，不受 candidate 本身的类型而影响
+            # 但是其他类的总数不变，所以还要加1回来，太别扭啦！
             binary_ig_this_class_count = num_train_per_class[this_class_val] - 1
             binary_ig_other_class_count = num_ins - binary_ig_this_class_count - 1
 
@@ -284,6 +288,12 @@ class ShapeletTransform(_PanelToTabularTransformer):
                         + ")"
                     )
 
+            # ouput:
+            # [[ 1.3656687e+00  1.2040941e+00  1.2678918e+00  1.0855269e+00
+            #    9.5686203e-01  8.7407000e-01  7.2948174e-01  6.3598847e-01
+            #    5.8865869e-01  4.7605887e-01  3.6073880e-01  2.7456137e-01
+            #    8.9037269e-02  2.0697246e-01  2.1393694e-01  1.8492319e-01
+            #    1.5051026e-01 -2.6545963e-02  .............  1.3499791e+00]]
             this_series_len = len(X[series_id][0])
 
             # The bound on possible shapelet lengths will differ
@@ -334,13 +344,20 @@ class ShapeletTransform(_PanelToTabularTransformer):
                 num_candidates_per_case = min(
                     self.num_candidates_to_sample_per_case, num_candidates_per_case
                 )
+
                 cand_idx = list(
+                    # Maximum index is 90525
+                    # output:
+                    # num_candidates_per_case: 10
+                    # [38934, 45550, 87266, 8439, 25114, 20315, 71994, 89611, 38849, 29430]
                     self._random_state.choice(
                         list(range(0, len(candidate_starts_and_lens))),
                         num_candidates_per_case,
                         replace=False,
                     )
                 )
+                # output:
+                # [[104, 93], [125, 178], [344, 65], [20, 132], [63, 295], [50, 293], [232, 193], [382, 35], [104, 8], [75, 333]]
                 candidates_to_visit = [candidate_starts_and_lens[x] for x in cand_idx]
 
             for candidate_idx in range(num_candidates_per_case):
@@ -361,6 +378,19 @@ class ShapeletTransform(_PanelToTabularTransformer):
                 cand_start_pos = candidates_to_visit[candidate_idx][0]
                 cand_len = candidates_to_visit[candidate_idx][1]
 
+                # output:
+                # [[-0.04698498 -0.14129926 -0.06066407  0.11757452  0.30990595  0.47843388
+                #    0.67353713  0.87277054  0.93947601  1.06591896  1.24837001  1.43572977
+                #    1.6270142   1.81940447  1.75603077  1.63345905  1.52722406  1.4752467
+                #    1.32755769  1.15159907  1.03911955  0.89772868  0.74534059  0.62774936
+                #    0.54474237  0.59130412  0.48568196  0.3722527   0.22595629  0.11476502
+                #    0.01890813 -0.11365251 -0.25845695 -0.30903432 -0.47872494 -0.60080091
+                #   -0.75436024 -0.77838301 -0.88446168 -0.86152591 -0.68843087 -0.51603274
+                #   -0.46583059 -0.59445563 -0.69135799 -0.80792563 -0.87564844 -0.96655772
+                #   -1.02840232 -1.17248337 -1.32197222 -1.47241695 -1.57949842 -1.68552075
+                #   -1.61722213 -1.63087048 -1.72121612 -1.60557136 -1.39675109 -1.17116737
+                #   -0.99622406 -0.77729262 -0.51549931 -0.29046636 -0.0719802   0.15132158
+                #    0.41558067  0.63013695  0.84566929  1.05163879  1.24866861  1.48332606]]
                 candidate = ShapeletTransform.zscore(
                     X[series_id][:, cand_start_pos : cand_start_pos + cand_len]
                 )
@@ -384,6 +414,7 @@ class ShapeletTransform(_PanelToTabularTransformer):
 
                     if i == series_id:
                         # don't evaluate candidate against own series
+                        # 前面已经把自己踢掉了，所以对总数计算没有影响
                         continue
 
                     if y[i] == this_class_val:
@@ -403,26 +434,39 @@ class ShapeletTransform(_PanelToTabularTransformer):
                         start_left = 0
                         start_right = 0
 
+                    # iteration time of each side
+                    # For instance, time series length is 400 while candidate's length is 200.
+                    # Then, both left and right search should be 100 times.
                     for _ in range(
                         max(1, int(np.ceil((X_lens[i] - cand_len) / 2)))
                     ):  # max
                         # used to force iteration where series len ==
                         # candidate len
                         if start_left < 0:
+                            # Shuffle to the pos which can compare the last dist (enough len)
                             start_left = X_lens[i] - 1 - cand_len
 
                         comparison = ShapeletTransform.zscore(
                             X[i][:, start_left : start_left + cand_len]
                         )
+                        # https://blog.csdn.net/hqh131360239/article/details/79061535
+                        # In mathematics, a norm is a function from a real or complex vector space to
+                        # the nonnegative real numbers that behaves in certain ways like the distance
+                        # from the origin.
+                        # This is actually euclidean distance.
                         dist_left = np.linalg.norm(candidate - comparison)
+                        # Maybe it is not necessary to use dist**2
                         bsf_dist = min(dist_left * dist_left, bsf_dist)
 
                         # for odd lengths
                         if start_left == start_right:
+                            # Same point, so only need to calculate once.
                             continue
 
                         # right
                         if start_right == X_lens[i] - cand_len + 1:
+                            # This is not enough to shuffle to next one.
+                            # Shuffle to the first pos.
                             start_right = 0
                         comparison = ShapeletTransform.zscore(
                             X[i][:, start_right : start_right + cand_len]
@@ -433,6 +477,7 @@ class ShapeletTransform(_PanelToTabularTransformer):
                         start_left -= 1
                         start_right += 1
 
+                    # This step we can get the smallest distance between time series and a shapelet.
                     orderline.append((bsf_dist, binary_class_identifier))
                     # sorting required after each add for early IG abandon.
                     # timsort should be efficient as array is almost in
@@ -441,7 +486,21 @@ class ShapeletTransform(_PanelToTabularTransformer):
                     # times, not just access root
                     orderline.sort()
 
+                    # why do we just:
+                    # ig_upper_bound = ShapeletTransform.calc_early_binary_ig(
+                    # orderline,
+                    # num_visited_this_class,
+                    # num_visited_other_class,
+                    # binary_ig_this_class_count,
+                    # binary_ig_other_class_count,
+                    # )
+                    # 这个实现太别扭了，需要改一改
                     if len(orderline) > 2:
+                        # 当有2个以上的 split point 时就该考虑早期放弃
+                        # num_visited_this_class 的条目数一定小于等于 binary_ig_this_class_count
+                        # 因为此时并没有完全遍历完数据集，这才是为什么要 early abandon 的原因
+                        # num_visited_other_class 同理
+                        # 可能先算了前几个，欸，感觉有希望的才继续算，没有希望的就直接抛弃了
                         ig_upper_bound = ShapeletTransform.calc_early_binary_ig(
                             orderline,
                             num_visited_this_class,
@@ -454,7 +513,10 @@ class ShapeletTransform(_PanelToTabularTransformer):
                             candidate_rejected = True
                             break
 
+                # Finally! End point for a candidate
                 candidates_evaluated += 1
+
+                # Weird? 为什么 100 条打印一次?
                 if self.verbose > 3 and candidates_evaluated % 100 == 0:
                     print("candidates evaluated: " + str(candidates_evaluated))  # noqa
 
@@ -465,6 +527,7 @@ class ShapeletTransform(_PanelToTabularTransformer):
                         binary_ig_this_class_count,
                         binary_ig_other_class_count,
                     )
+                    # 依然不明白为什么 candidate 要用 z-score
                     accepted_candidate = Shapelet(
                         series_id, cand_start_pos, cand_len, final_ig, candidate
                     )
@@ -474,6 +537,7 @@ class ShapeletTransform(_PanelToTabularTransformer):
 
                     # informal, but extra 10% allowance for self similar later
                     if (
+                        # 为什么是 3 倍？
                         shapelet_heaps_by_class[this_class_val].get_size()
                         > self.max_shapelets_to_store_per_class * 3
                     ):
@@ -559,6 +623,7 @@ class ShapeletTransform(_PanelToTabularTransformer):
                                     "remaining".format(
                                         int(
                                             round(
+                                                # 这个计算有误， 一个单位是分钟，一个单位是秒，不可以直接相减
                                                 (self.time_contract_in_mins - time_now)
                                                 / 60,
                                                 3,
@@ -609,7 +674,7 @@ class ShapeletTransform(_PanelToTabularTransformer):
         #       get list of shapelets
         #       sort by quality
         #       remove self similar
-
+        # 开始接受正式的 shapelet
         self.shapelets = []
         for class_val in distinct_class_vals:
             by_class_descending_ig = sorted(
@@ -682,6 +747,7 @@ class ShapeletTransform(_PanelToTabularTransformer):
             if shapelet_one.series_id != shapelet_two.series_id:
                 return False
 
+            # 这个判断语句可以改写一下，感觉写法怪别捏的
             if (shapelet_one.start_pos >= shapelet_two.start_pos) and (
                 shapelet_one.start_pos <= shapelet_two.start_pos + shapelet_two.length
             ):
@@ -693,10 +759,12 @@ class ShapeletTransform(_PanelToTabularTransformer):
 
         # [s][2] will be a tuple with (info_gain,id,Shapelet), so we need to
         # access [2]
+        # 第一个肯定要加的
         to_return = [shapelet_list[0][2]]  # first shapelet must be ok
         for s in range(1, len(shapelet_list)):
             can_add = True
             for c in range(0, s):
+                # 算自己左侧的 list 里是否有与自己相似的
                 if is_self_similar(shapelet_list[s][2], shapelet_list[c][2]):
                     can_add = False
                     break
@@ -788,6 +856,8 @@ class ShapeletTransform(_PanelToTabularTransformer):
         return ent
 
     # could cythonise
+    # 这个方法的算法是 O(n), 必须遍历每一个 split 以方便找到 ig max
+    # 看一下能不能优化算法？
     @staticmethod
     def calc_binary_ig(orderline, total_num_this_class, total_num_other_class):
         # def entropy(ent_class_counts, all_class_count):
@@ -830,6 +900,8 @@ class ShapeletTransform(_PanelToTabularTransformer):
         return bsf_ig
 
     # could cythonise
+    # binary_ig_this_class_count - num_visited_this_class,
+    # binary_ig_other_class_count - num_visited_other_class,
     @staticmethod
     def calc_early_binary_ig(
         orderline,
@@ -867,6 +939,9 @@ class ShapeletTransform(_PanelToTabularTransformer):
 
             # optimistically add this class to left side first and other to
             # right
+            # 有巧思: split 其实是 0, 1,2,...n-1
+            # 为什么 left_prop 不加 count_this_class?
+            # 因为 left_prop 算的是 split 左右不区分类的总数， 所以 split 左侧真实的值是 split + 1, split 从 0 开始
             left_prop = (split + 1 + num_to_add_this_class) / total_all
             ent_left = ShapeletTransform.binary_entropy(
                 count_this_class + num_to_add_this_class, count_other_class
@@ -885,6 +960,7 @@ class ShapeletTransform(_PanelToTabularTransformer):
             bsf_ig = max(ig, bsf_ig)
 
             # now optimistically add this class to right, other to left
+            # 因为我们并不清楚左侧为A类更好还是右侧为A类更好，所以要交换后再算一次
             left_prop = (split + 1 + num_to_add_other_class) / total_all
             ent_left = ShapeletTransform.binary_entropy(
                 count_this_class, count_other_class + num_to_add_other_class
@@ -951,6 +1027,7 @@ class ShapeletTransform(_PanelToTabularTransformer):
                     zscored[i] = (j - mns) / sstd
         return zscored
 
+    # 没有引用到?
     @staticmethod
     def euclidean_distance_early_abandon(u, v, min_dist):
         sum_dist = 0
